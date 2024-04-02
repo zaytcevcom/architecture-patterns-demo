@@ -1,0 +1,78 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Http\Action\V1\Unions;
+
+use App\Modules\Union\Command\Invite\UnionInviteCommand;
+use App\Modules\Union\Command\Invite\UnionInviteHandler;
+use OpenApi\Attributes as OA;
+use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\ServerRequestInterface;
+use Psr\Http\Server\RequestHandlerInterface;
+use ZayMedia\Shared\Components\Router\Route;
+use ZayMedia\Shared\Components\Validator\Validator;
+use ZayMedia\Shared\Http\Middleware\Identity\Authenticate;
+use ZayMedia\Shared\Http\Response\JsonDataSuccessResponse;
+
+#[OA\Post(
+    path: '/unions/{id}/invite/{userId}',
+    description: 'Приглашение пользователя в объединение<br><br>
+    **Коды ошибок**:<br>
+    **1** - Объединение не найдено<br>
+    **2** - Достигнуто ограничение на максимальное кол-во объединений<br>
+    **3** - Достигнут дневной лимит на максимальное кол-во объединений<br>
+    **4** - Доступ запрещен<br>
+    ',
+    summary: 'Приглашение пользователя в объединение',
+    security: [['bearerAuth' => '{}']],
+    tags: ['Unions']
+)]
+#[OA\Parameter(
+    name: 'id',
+    description: 'Идентификатор объединения',
+    in: 'path',
+    required: true,
+    schema: new OA\Schema(
+        type: 'integer',
+        format: 'int64'
+    ),
+)]
+#[OA\Parameter(
+    name: 'userId',
+    description: 'Идентификатор пользователя',
+    in: 'path',
+    required: true,
+    schema: new OA\Schema(
+        type: 'integer',
+        format: 'int64'
+    ),
+)]
+#[OA\Response(
+    response: '200',
+    description: 'Successful operation'
+)]
+final readonly class InviteAction implements RequestHandlerInterface
+{
+    public function __construct(
+        private UnionInviteHandler $handler,
+        private Validator $validator
+    ) {}
+
+    public function handle(ServerRequestInterface $request): ResponseInterface
+    {
+        $identity = Authenticate::getIdentity($request);
+
+        $command = new UnionInviteCommand(
+            sourceId: $identity->id,
+            targetId: Route::getArgumentToInt($request, 'userId'),
+            unionId: Route::getArgumentToInt($request, 'id')
+        );
+
+        $this->validator->validate($command);
+
+        $this->handler->handle($command);
+
+        return new JsonDataSuccessResponse();
+    }
+}
